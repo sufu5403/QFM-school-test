@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hand Dance, Foot Skip - 概念遊戲</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #87CEEB; /* 天空藍 */
+            font-family: 'Noto Sans TC', sans-serif;
+            touch-action: none; /* 停用雙擊放大等手勢 */
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* UI 覆蓋層 */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* 讓點擊穿透到 canvas 或特定按鈕 */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* 頂部資訊列 */
+        #hud {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            color: white;
+        }
+
+        .score-box {
+            font-size: 28px;
+            font-weight: 900;
+            background: rgba(255, 165, 0, 0.9);
+            padding: 10px 20px;
+            border-radius: 15px;
+            border: 3px solid white;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        /* 能量條容器 */
+        .energy-container {
+            width: 50px;
+            height: 200px;
+            background: rgba(0,0,0,0.5);
+            border: 3px solid white;
+            border-radius: 10px;
+            position: relative;
+            overflow: hidden;
+            margin-right: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .energy-bar {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 0%;
+            background: linear-gradient(to top, #ff4500, #ffd700);
+            transition: height 0.1s ease-out;
+        }
+        
+        .energy-icon {
+            position: absolute;
+            top: -15px;
+            font-size: 30px;
+            z-index: 10;
+        }
+
+        /* 螢幕上的控制提示 */
+        #controls-hint {
+            text-align: center;
+            color: white;
+            font-size: 18px;
+            background: rgba(0,0,0,0.6);
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            align-self: center;
+            pointer-events: auto;
+        }
+
+        .key {
+            display: inline-block;
+            background: #eee;
+            color: #333;
+            padding: 2px 8px;
+            border-radius: 5px;
+            font-weight: bold;
+            margin: 0 4px;
+            border-bottom: 3px solid #ccc;
+        }
+
+        /* 開始/結束畫面 */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            pointer-events: auto;
+            z-index: 100;
+        }
+
+        .screen h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+            color: #FFD700;
+            text-shadow: 0 0 10px #FF8C00;
+        }
+
+        .screen p {
+            font-size: 20px;
+            margin-bottom: 30px;
+            text-align: center;
+            line-height: 1.6;
+            max-width: 600px;
+        }
+
+        .btn {
+            background: linear-gradient(to bottom, #4CAF50, #2E8B57);
+            color: white;
+            border: 3px solid white;
+            padding: 15px 40px;
+            font-size: 24px;
+            font-weight: bold;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            transition: transform 0.1s;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Fever 提示文字 */
+        #fever-text {
+            position: absolute;
+            top: 30%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 60px;
+            font-weight: 900;
+            color: #39FF14;
+            text-shadow: 0 0 20px white, 0 0 30px #39FF14;
+            animation: pulse 0.5s infinite alternate;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        @keyframes pulse {
+            from { transform: translate(-50%, -50%) scale(1); }
+            to { transform: translate(-50%, -50%) scale(1.1); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- 遊戲畫布 -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- UI 覆蓋層 -->
+    <div id="ui-layer">
+        <div id="hud">
+            <div class="score-box">分數 <span id="score">0</span></div>
+            <div class="energy-container">
+                <div class="energy-icon">⚡</div>
+                <div class="energy-bar" id="energy-bar"></div>
+            </div>
+        </div>
+
+        <div id="fever-text">FEVER TIME!<br><span style="font-size: 30px; color: white;">雙臂平舉衝刺中！</span></div>
+
+        <div id="controls-hint">
+            <span class="key">←</span> <span class="key">→</span> 切換跑道 | 
+            <span class="key">↑</span> 連按踏步(集氣) | 
+            <span class="key">Q</span> 左手 <span class="key">E</span> 右手 |
+            <span class="key">空白鍵</span> Fever衝刺(滿氣)
+        </div>
+    </div>
+
+    <!-- 開始畫面 -->
+    <div id="start-screen" class="screen">
+        <h1>Hand Dance, Foot Skip</h1>
+        <p>
+            結合「超慢跑」與「肩頸伸展」的健康遊戲原型！<br>
+            按 <b>左右方向鍵</b> 切換跑道閃避路障<br>
+            不斷連按 <b>上方向鍵</b> 模擬踏步來累積能量<br>
+            遇到懸空金幣時，按下 <b>Q (左手)</b> 或 <b>E (右手)</b> 平舉手臂獲取<br>
+            能量滿時，按下 <b>空白鍵 (雙手平舉)</b> 進入無敵衝刺！
+        </p>
+        <button class="btn" id="start-btn">開始運動</button>
+    </div>
+
+    <!-- 結束畫面 -->
+    <div id="game-over-screen" class="screen hidden">
+        <h1 style="color: #FF6347;">運動結束！</h1>
+        <p style="font-size: 30px;">最終分數: <span id="final-score" style="color:#FFD700; font-weight:bold;">0</span></p>
+        <button class="btn" id="restart-btn">再來一局</button>
+    </div>
+
+    <script>
+        // 取得 Canvas 和 Context
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI 元素
+        const scoreEl = document.getElementById('score');
+        const energyBarEl = document.getElementById('energy-bar');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const finalScoreEl = document.getElementById('final-score');
+        const feverTextEl = document.getElementById('fever-text');
+
+        // 調整畫布大小符合視窗
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // 遊戲核心變數
+        let gameState = 'START'; // START, PLAYING, GAMEOVER
+        let animationId;
+        
+        let score = 0;
+        let energy = 0;
+        let speed = 6;
+        let baseSpeed = 6;
+        let isFever = false;
+        let feverTimer = 0;
+
+        // 跑道設定
+        const lanes = 3;
+        let laneWidth = 0;
+        let roadWidth = 0;
+        let roadLeftEdge = 0;
+
+        // 玩家狀態
+        const player = {
+            lane: 1, // 0: 左, 1: 中, 2: 右
+            width: 60,
+            height: 100,
+            color: '#1E90FF', // 機器人藍
+            leftArm: false,
+            rightArm: false,
+            stepYOffset: 0, // 踏步動畫偏移
+            stepTick: 0
+        };
+
+        // 遊戲物件 (障礙物、金幣)
+        let gameObjects = [];
+        let frameCount = 0;
+
+        // 按鍵狀態記錄
+        const keys = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            ArrowUp: false,
+            KeyQ: false,
+            KeyE: false,
+            Space: false
+        };
+
+        // 監聽鍵盤事件
+        window.addEventListener('keydown', (e) => {
+            if(gameState !== 'PLAYING') return;
+            if(!keys[e.code]) {
+                keys[e.code] = true;
+                
+                // 單次觸發邏輯
+                if(e.code === 'ArrowLeft' && player.lane > 0) player.lane--;
+                if(e.code === 'ArrowRight' && player.lane < 2) player.lane++;
+                if(e.code === 'ArrowUp' && !isFever) {
+                    // 模擬踏步：增加能量、分數微調
+                    energy += 3;
+                    if(energy > 100) energy = 100;
+                    score += 1;
+                    // 踏步視覺效果
+                    player.stepTick = 10;
+                }
+                if(e.code === 'KeyQ') player.leftArm = true;
+                if(e.code === 'KeyE') player.rightArm = true;
+                if(e.code === 'Space' && energy >= 100 && !isFever) {
+                    activateFever();
+                }
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+            if(e.code === 'KeyQ') player.leftArm = false;
+            if(e.code === 'KeyE') player.rightArm = false;
+        });
+
+        // 啟動 Fever Time (衝刺模式)
+        function activateFever() {
+            isFever = true;
+            energy = 100; // 消耗能量或從100開始扣
+            player.leftArm = true;
+            player.rightArm = true;
+            feverTextEl.style.opacity = 1;
+            document.body.style.backgroundColor = '#FF4500'; // 變成熱血紅
+        }
+
+        // 初始化遊戲
+        function initGame() {
+            score = 0;
+            energy = 0;
+            speed = baseSpeed;
+            isFever = false;
+            player.lane = 1;
+            player.leftArm = false;
+            player.rightArm = false;
+            gameObjects = [];
+            frameCount = 0;
+            gameState = 'PLAYING';
+            feverTextEl.style.opacity = 0;
+            document.body.style.backgroundColor = '#87CEEB';
+            
+            startScreen.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+            
+            updateHUD();
+            gameLoop();
+        }
+
+        // 生成遊戲物件
+        function spawnObject() {
+            // 每隔一段時間生成
+            if (frameCount % (isFever ? 30 : 60) === 0) {
+                const lane = Math.floor(Math.random() * lanes);
+                const rand = Math.random();
+                
+                let type, width, height, color;
+
+                if (rand < 0.4) {
+                    // 40% 機率是障礙物 (需要閃避)
+                    type = 'obstacle';
+                    width = 80;
+                    height = 30;
+                    color = '#FFA500'; // 橘色路障
+                } else if (rand < 0.7) {
+                    // 30% 機率是普通金幣 (在跑道中間)
+                    type = 'coin';
+                    width = 40;
+                    height = 40;
+                    color = '#FFD700'; // 金色
+                } else if (rand < 0.85) {
+                    // 15% 機率是左手道具 (出現在跑道偏左)
+                    type = 'item_left';
+                    width = 40;
+                    height = 40;
+                    color = '#00FA9A'; // 綠色補給
+                } else {
+                    // 15% 機率是右手道具 (出現在跑道偏右)
+                    type = 'item_right';
+                    width = 40;
+                    height = 40;
+                    color = '#00FA9A';
+                }
+
+                gameObjects.push({
+                    x: 0, // 將在 draw 時計算
+                    y: -50,
+                    lane: lane,
+                    type: type,
+                    width: width,
+                    height: height,
+                    color: color,
+                    active: true
+                });
+            }
+        }
+
+        // 更新與繪製 HUD
+        function updateHUD() {
+            scoreEl.innerText = Math.floor(score);
+            energyBarEl.style.height = `${energy}%`;
+            
+            if (energy >= 100 && !isFever) {
+                energyBarEl.style.background = 'linear-gradient(to top, #39FF14, #00FF00)';
+                energyBarEl.style.boxShadow = '0 0 15px #39FF14';
+            } else if (!isFever) {
+                energyBarEl.style.background = 'linear-gradient(to top, #ff4500, #ffd700)';
+                energyBarEl.style.boxShadow = 'none';
+            }
+        }
+
+        // 繪製背景 (草地與道路)
+        function drawBackground() {
+            // 草地
+            ctx.fillStyle = isFever ? '#8B0000' : '#32CD32';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 道路
+            roadWidth = Math.min(canvas.width * 0.8, 600);
+            laneWidth = roadWidth / lanes;
+            roadLeftEdge = (canvas.width - roadWidth) / 2;
+
+            ctx.fillStyle = '#555';
+            ctx.fillRect(roadLeftEdge, 0, roadWidth, canvas.height);
+
+            // 車道線 (動畫效果)
+            ctx.fillStyle = 'white';
+            ctx.lineWidth = 5;
+            const lineOffset = (frameCount * speed) % 80;
+            
+            for (let i = 1; i < lanes; i++) {
+                const lineX = roadLeftEdge + i * laneWidth;
+                for (let y = -80 + lineOffset; y < canvas.height; y += 80) {
+                    ctx.fillRect(lineX - 5, y, 10, 40);
+                }
+            }
+        }
+
+        // 繪製玩家 (火柴人/機器人)
+        function drawPlayer() {
+            const px = roadLeftEdge + player.lane * laneWidth + laneWidth / 2;
+            const py = canvas.height - 150 + player.stepYOffset;
+
+            ctx.save();
+            ctx.translate(px, py);
+
+            // Fever 光環
+            if (isFever) {
+                ctx.beginPath();
+                ctx.arc(0, 0, 80, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 215, 0, 0.4)';
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(0, 0, 100, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 215, 0, 0.2)';
+                ctx.fill();
+            }
+
+            // 身體
+            ctx.fillStyle = player.color;
+            ctx.fillRect(-player.width/2, -player.height/2, player.width, player.height);
+            
+            // 頭部
+            ctx.beginPath();
+            ctx.arc(0, -player.height/2 - 30, 25, 0, Math.PI * 2);
+            ctx.fillStyle = '#C0C0C0';
+            ctx.fill();
+            ctx.stroke();
+
+            // 眼睛
+            ctx.fillStyle = 'black';
+            ctx.fillRect(-10, -player.height/2 - 35, 5, 5);
+            ctx.fillRect(5, -player.height/2 - 35, 5, 5);
+            // 嘴巴 (微笑)
+            ctx.beginPath();
+            ctx.arc(0, -player.height/2 - 25, 10, 0, Math.PI, false);
+            ctx.stroke();
+
+            // 手臂繪製
+            ctx.lineWidth = 15;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#C0C0C0';
+
+            // 左手
+            ctx.beginPath();
+            if (player.leftArm) {
+                // 平舉
+                ctx.moveTo(-player.width/2, -20);
+                ctx.lineTo(-player.width/2 - 80, -20);
+            } else {
+                // 跑步擺動
+                ctx.moveTo(-player.width/2, -20);
+                const swing = Math.sin(frameCount * 0.2) * 20;
+                ctx.lineTo(-player.width/2 - 20, 20 + swing);
+            }
+            ctx.stroke();
+
+            // 右手
+            ctx.beginPath();
+            if (player.rightArm) {
+                // 平舉
+                ctx.moveTo(player.width/2, -20);
+                ctx.lineTo(player.width/2 + 80, -20);
+            } else {
+                // 跑步擺動
+                ctx.moveTo(player.width/2, -20);
+                const swing = Math.cos(frameCount * 0.2) * 20;
+                ctx.lineTo(player.width/2 + 20, 20 + swing);
+            }
+            ctx.stroke();
+
+            // 腳步繪製 (踏步動畫)
+            ctx.lineWidth = 15;
+            ctx.strokeStyle = '#333';
+            
+            let leftLegY = player.height/2 + 30;
+            let rightLegY = player.height/2 + 30;
+            
+            if (player.stepTick > 0) {
+                if (frameCount % 4 < 2) {
+                    leftLegY -= 20;
+                } else {
+                    rightLegY -= 20;
+                }
+                player.stepTick--;
+            } else if (isFever) {
+                 // 衝刺時雙腳快速擺動
+                 leftLegY += Math.sin(frameCount * 0.5) * 20;
+                 rightLegY += Math.cos(frameCount * 0.5) * 20;
+            }
+
+            // 左腳
+            ctx.beginPath();
+            ctx.moveTo(-15, player.height/2);
+            ctx.lineTo(-15, leftLegY);
+            ctx.stroke();
+            
+            // 右腳
+            ctx.beginPath();
+            ctx.moveTo(15, player.height/2);
+            ctx.lineTo(15, rightLegY);
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        // 繪製與更新遊戲物件
+        function handleObjects() {
+            const playerX = roadLeftEdge + player.lane * laneWidth + laneWidth / 2;
+            const playerY = canvas.height - 150;
+
+            for (let i = gameObjects.length - 1; i >= 0; i--) {
+                let obj = gameObjects[i];
+                if (!obj.active) continue;
+
+                // 移動物件
+                obj.y += speed;
+
+                // 決定物件 X 座標
+                let objCenterX = roadLeftEdge + obj.lane * laneWidth + laneWidth / 2;
+                if (obj.type === 'item_left') objCenterX -= laneWidth * 0.4; // 偏左
+                if (obj.type === 'item_right') objCenterX += laneWidth * 0.4; // 偏右
+
+                obj.x = objCenterX - obj.width / 2;
+
+                // 繪製物件
+                ctx.fillStyle = obj.color;
+                if (obj.type === 'obstacle') {
+                    // 畫路障 (橘色與灰色相間)
+                    ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+                    ctx.fillStyle = '#666';
+                    ctx.fillRect(obj.x + 10, obj.y, 20, obj.height);
+                    ctx.fillRect(obj.x + 50, obj.y, 20, obj.height);
+                } else if (obj.type === 'coin') {
+                    // 畫金幣
+                    ctx.beginPath();
+                    ctx.arc(objCenterX, obj.y + obj.height/2, obj.width/2, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = '#B8860B';
+                    ctx.font = '20px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('$', objCenterX, obj.y + obj.height/2);
+                } else {
+                    // 手部道具 (蘋果/能量瓶等象徵)
+                    ctx.beginPath();
+                    ctx.arc(objCenterX, obj.y + obj.height/2, obj.width/2, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = 'white';
+                    ctx.font = '16px Noto Sans TC';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(obj.type === 'item_left' ? 'L手' : 'R手', objCenterX, obj.y + obj.height/2);
+                }
+
+                // 碰撞判定
+                // Y 軸碰撞：物件與玩家 Y 軸重疊
+                if (obj.y + obj.height > playerY - player.height/2 && obj.y < playerY + player.height/2) {
+                    
+                    // 檢查同車道
+                    if (obj.lane === player.lane) {
+                        
+                        if (obj.type === 'obstacle') {
+                            if (!isFever) {
+                                // 撞到障礙物
+                                gameOver();
+                                return;
+                            } else {
+                                // Fever 模式撞碎障礙物加分
+                                score += 50;
+                                obj.active = false;
+                            }
+                        } 
+                        else if (obj.type === 'coin') {
+                            // 吃到中間金幣
+                            score += 10;
+                            obj.active = false;
+                        }
+                        else if (obj.type === 'item_left') {
+                            // 需要左手平舉
+                            if (player.leftArm || isFever) {
+                                score += 20;
+                                obj.active = false;
+                            }
+                        }
+                        else if (obj.type === 'item_right') {
+                            // 需要右手平舉
+                            if (player.rightArm || isFever) {
+                                score += 20;
+                                obj.active = false;
+                            }
+                        }
+                    }
+                }
+
+                // 移除出界的物件
+                if (obj.y > canvas.height) {
+                    gameObjects.splice(i, 1);
+                }
+            }
+        }
+
+        // 遊戲結束邏輯
+        function gameOver() {
+            gameState = 'GAMEOVER';
+            cancelAnimationFrame(animationId);
+            finalScoreEl.innerText = Math.floor(score);
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        // 遊戲主迴圈
+        function gameLoop() {
+            if (gameState !== 'PLAYING') return;
+
+            // 清空畫布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 更新邏輯
+            frameCount++;
+            
+            if (isFever) {
+                speed = baseSpeed * 2.5;
+                feverTimer++;
+                score += 0.5; // Fever 持續加分
+                if (feverTimer > 300) { // Fever 持續約 5 秒 (假設 60fps)
+                    isFever = false;
+                    feverTimer = 0;
+                    energy = 0; // 歸零
+                    feverTextEl.style.opacity = 0;
+                    document.body.style.backgroundColor = '#87CEEB';
+                    
+                    // 解除強制平舉 (如果玩家沒按著鍵的話)
+                    if(!keys['KeyQ']) player.leftArm = false;
+                    if(!keys['KeyE']) player.rightArm = false;
+                }
+            } else {
+                speed = baseSpeed;
+                score += 0.05; // 基礎前進加分
+                
+                // 能量隨時間略微下降，鼓勵持續踏步
+                if (frameCount % 10 === 0 && energy > 0) {
+                    energy -= 0.5;
+                }
+            }
+
+            // 踏步視覺上下浮動
+            player.stepYOffset = isFever ? 0 : Math.sin(frameCount * 0.1) * 5;
+
+            // 執行繪製與判斷
+            drawBackground();
+            spawnObject();
+            handleObjects();
+            drawPlayer();
+            updateHUD();
+
+            // 下一幀
+            animationId = requestAnimationFrame(gameLoop);
+        }
+
+        // 按鈕事件綁定
+        document.getElementById('start-btn').addEventListener('click', initGame);
+        document.getElementById('restart-btn').addEventListener('click', initGame);
+
+    </script>
+</body>
+</html>
